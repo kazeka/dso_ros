@@ -35,7 +35,7 @@
 #include "FullSystem/FullSystem.h"
 #include "util/Undistort.h"
 #include "IOWrapper/Pangolin/PangolinDSOViewer.h"
-#include "IOWrapper/OutputWrapper/SampleOutputWrapper.h"
+#include "OutputWrapper.h"
 
 
 #include <ros/ros.h>
@@ -50,7 +50,7 @@ std::string calib = "";
 std::string vignetteFile = "";
 std::string gammaFile = "";
 std::string saveFile = "";
-bool useSampleOutput=false;
+bool useSampleOutput = false;
 
 using namespace dso;
 
@@ -165,8 +165,7 @@ void vidCb(const sensor_msgs::ImageConstPtr img)
 	}
 
 	MinimalImageB minImg((int)cv_ptr->image.cols, (int)cv_ptr->image.rows,(unsigned char*)cv_ptr->image.data);
-	ImageAndExposure* undistImg = undistorter->undistort<unsigned char>(&minImg, 1,0, 1.0f);
-	undistImg->timestamp=img->header.stamp.toSec(); // relay the timestamp to dso
+	ImageAndExposure* undistImg = undistorter->undistort<unsigned char>(&minImg, 1, img->header.stamp.toSec(), 1.0f);
 	fullSystem->addActiveFrame(undistImg, frameID);
 	frameID++;
 	delete undistImg;
@@ -182,7 +181,6 @@ int main( int argc, char** argv )
 	ros::init(argc, argv, "dso_live");
 
 
-
 	for(int i=1; i<argc;i++) parseArgument(argv[i]);
 
 
@@ -192,7 +190,7 @@ int main( int argc, char** argv )
 	setting_maxFrames = 7;
 	setting_maxOptIterations=4;
 	setting_minOptIterations=1;
-	setting_logStuff = false;
+	setting_logStuff = true;
 	setting_kfGlobalWeight = 1.3;
 
 
@@ -221,15 +219,13 @@ int main( int argc, char** argv )
 	    		 (int)undistorter->getSize()[1]));
 
 
-    if(useSampleOutput)
-        fullSystem->outputWrapper.push_back(new IOWrap::SampleOutputWrapper());
-
-
     if(undistorter->photometricUndist != 0)
     	fullSystem->setGammaFunction(undistorter->photometricUndist->getG());
 
     ros::NodeHandle nh;
     ros::Subscriber imgSub = nh.subscribe("image", 1, &vidCb);
+
+    fullSystem->outputWrapper.push_back(new IOWrap::OutputWrapper(nh));
 
     ros::spin();
     fullSystem->printResult(saveFile); 
