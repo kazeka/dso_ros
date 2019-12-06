@@ -22,7 +22,7 @@ To access computed information in real-time, I recommend to implement your own O
 2. run 
 
 		export DSO_PATH=[PATH_TO_DSO]/dso
-		rosmake
+		catkin build dso_ros
 	
 
 
