@@ -1,6 +1,6 @@
 /**
 * This file is part of DSO.
-* 
+*
 * Copyright 2016 Technical University of Munich and Intel.
 * Developed by Jakob Engel <engelj at in dot tum dot de>,
 * for more information see <http://vision.in.tum.de/dso>.
@@ -51,6 +51,8 @@ std::string vignetteFile = "";
 std::string gammaFile = "";
 std::string saveFile = "";
 bool useSampleOutput = false;
+
+int rosQueueSize = 1;
 
 using namespace dso;
 
@@ -150,7 +152,6 @@ void vidCb(const sensor_msgs::ImageConstPtr img)
 	assert(cv_ptr->image.type() == CV_8U);
 	assert(cv_ptr->image.channels() == 1);
 
-
 	if(setting_fullResetRequested)
 	{
 		std::vector<IOWrap::Output3DWrapper*> wraps = fullSystem->outputWrapper;
@@ -173,33 +174,36 @@ void vidCb(const sensor_msgs::ImageConstPtr img)
 }
 
 
-
-
-
 int main( int argc, char** argv )
 {
 	ros::init(argc, argv, "dso_live");
 
-
 	for(int i=1; i<argc;i++) parseArgument(argv[i]);
 
+	ros::NodeHandle param_nh("~");
+	param_nh.param<float>("point_candidates", setting_desiredImmatureDensity, 1500.);
+	param_nh.param<float>("active_points", setting_desiredPointDensity, 2000.);
+	param_nh.param<int>("min_frames", setting_minFrames, 5);
+	param_nh.param<int>("max_frames", setting_maxFrames, 9);
+	param_nh.param<int>("min_iterations", setting_minOptIterations, 1);
+	param_nh.param<int>("max_iterations", setting_maxOptIterations, 5);
+	param_nh.param<float>("kf_frequency", setting_kfGlobalWeight, 1.0);    // general weight on threshold, the larger the more KF's are taken (e.g., 2 = double the amount of KF's).
+																		   // original is 1.0. 0.3 is a balance between speed and accuracy. if tracking lost, set this para higher
+	param_nh.param<bool>("kf_realtime", setting_realTimeMaxKF, false);     // if true, takes as many KF's as possible (will break the system if the camera stays stationary)
+	param_nh.param<float>("max_shift_t", setting_maxShiftWeightT, 0.04f * (720+540));
+	param_nh.param<float>("max_shift_r", setting_maxShiftWeightR, 0.04f * (720+540));
+	param_nh.param<float>("max_shift_rt", setting_maxShiftWeightRT, 0.02f * (720+540));
 
-	setting_desiredImmatureDensity = 1000;
-	setting_desiredPointDensity = 1200;
-	setting_minFrames = 5;
-	setting_maxFrames = 7;
-	setting_maxOptIterations=4;
-	setting_minOptIterations=1;
+	param_nh.param<int>("queue_size", rosQueueSize, 1);
+
 	setting_logStuff = true;
-	setting_kfGlobalWeight = 1.3;
 
-
-	printf("MODE WITH CALIBRATION, but without exposure times!\n");
-	setting_photometricCalibration = 2;
+	// printf("MODE WITH CALIBRATION, but without exposure times!\n");
+	// setting_photometricCalibration = 2;
+	printf("MODE WITHOUT CALIBRATION, without exposure times!\n");
+	setting_photometricCalibration = 0;
 	setting_affineOptModeA = 0;
 	setting_affineOptModeB = 0;
-
-
 
     undistorter = Undistort::getUndistorterForFile(calib, gammaFile, vignetteFile);
 
@@ -223,12 +227,12 @@ int main( int argc, char** argv )
     	fullSystem->setGammaFunction(undistorter->photometricUndist->getG());
 
     ros::NodeHandle nh;
-    ros::Subscriber imgSub = nh.subscribe("image", 1, &vidCb);
+	ros::Subscriber imgSub = nh.subscribe("image", rosQueueSize, &vidCb);
 
     fullSystem->outputWrapper.push_back(new IOWrap::OutputWrapper(nh));
 
     ros::spin();
-    fullSystem->printResult(saveFile); 
+    fullSystem->printResult(saveFile);
     for(IOWrap::Output3DWrapper* ow : fullSystem->outputWrapper)
     {
         ow->join();
@@ -240,4 +244,3 @@ int main( int argc, char** argv )
 
 	return 0;
 }
-
